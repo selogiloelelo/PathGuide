@@ -2,20 +2,18 @@
 import streamlit as st
 import calendar
 from datetime import date, datetime
+from urllib.parse import urlencode
+from html import escape
 from database import get_universities, get_bursaries
 
-st.set_page_config(
-    page_title="Application Deadlines | PathGuide SA",
-    page_icon="📅",
-    layout="wide"
-)
 
 # ---------- PAGE HEADER ----------
 st.title("📅 Application Deadlines")
 st.caption(
-    "Plan ahead. Select a date to discover university "
-    "application and bursary deadlines."
+    "Plan ahead by exploring university application "
+    "and bursary closing dates."
 )
+
 
 # ---------- DATE HELPER ----------
 def parse_date(value):
@@ -33,31 +31,29 @@ def parse_date(value):
 
     for date_format in formats:
         try:
-            return datetime.strptime(value, date_format).date()
+            result = datetime.strptime(value, date_format).date()
+
+            if result.year < 2000:
+                return None
+
+            return result
         except ValueError:
             continue
 
     return None
 
 
-# ---------- LOAD DATABASE DATA ----------
-universities = [
-    dict(row) for row in get_universities()
-]
-
-bursaries = [
-    dict(row) for row in get_bursaries()
-]
+# ---------- LOAD DATABASE ----------
+universities = [dict(row) for row in get_universities()]
+bursaries = [dict(row) for row in get_bursaries()]
 
 
-# ---------- GROUP OPPORTUNITIES BY CLOSING DATE ----------
+# ---------- GROUP DEADLINES BY DATE ----------
 def build_deadline_lookup(items):
     lookup = {}
 
     for item in items:
-        closing_date = parse_date(
-            item.get("closing_date")
-        )
+        closing_date = parse_date(item.get("closing_date"))
 
         if closing_date:
             key = closing_date.isoformat()
@@ -70,10 +66,46 @@ university_deadlines = build_deadline_lookup(universities)
 bursary_deadlines = build_deadline_lookup(bursaries)
 
 
-# ---------- CALENDAR STYLING ----------
+# ---------- URL STATE ----------
+def make_url(updates):
+    params = dict(st.query_params)
+    params.update(updates)
+    return "?" + urlencode(params)
+
+
+def get_calendar_state(prefix):
+    today = date.today()
+
+    selected_value = st.query_params.get(
+        f"{prefix}_date", today.isoformat()
+    )
+
+    try:
+        selected = date.fromisoformat(selected_value)
+    except (ValueError, TypeError):
+        selected = today
+
+    try:
+        year = int(
+            st.query_params.get(f"{prefix}_year", selected.year)
+        )
+        month = int(
+            st.query_params.get(f"{prefix}_month", selected.month)
+        )
+
+        if not 1 <= month <= 12 or not 1900 <= year <= 2200:
+            raise ValueError
+
+    except (ValueError, TypeError):
+        year = selected.year
+        month = selected.month
+
+    return year, month, selected
+
+
+# ---------- CALENDAR DESIGN ----------
 st.markdown("""
 <style>
-/* Main page spacing */
 .block-container {
     padding-top: 1.5rem;
     padding-bottom: 2rem;
@@ -81,247 +113,362 @@ st.markdown("""
     padding-right: 1rem;
 }
 
-/* Calendar headings */
-.calendar-month-title {
-    text-align: center;
-    font-size: 1.15rem;
-    font-weight: 700;
-    padding: 0.45rem 0;
+.calendar-switch {
+    display: flex;
+    gap: 8px;
+    margin: 12px 0 22px 0;
 }
 
-/* Weekday headings */
-.calendar-weekday {
+.calendar-switch a {
+    flex: 1;
     text-align: center;
-    color: var(--text-color);
-    opacity: 0.7;
-    font-size: 0.78rem;
-    font-weight: 600;
-    padding: 0.35rem 0;
-}
-
-/* Date buttons */
-div[data-testid="stButton"] button {
-    min-height: 40px;
-    padding: 0.1rem 0.05rem;
+    padding: 12px 8px;
     border-radius: 12px;
-    font-size: 0.82rem;
-    font-weight: 500;
-    white-space: normal;
-    overflow-wrap: anywhere;
-}
-
-/* Tighter calendar grid */
-div[data-testid="stHorizontalBlock"] {
-    gap: 0.25rem;
-}
-
-/* Tabs */
-button[data-baseweb="tab"] {
+    border: 1px solid var(--border-color, #dddddd);
+    text-decoration: none !important;
+    font-size: 14px;
     font-weight: 600;
+    color: var(--text-color) !important;
 }
 
-/* Mobile adjustments */
-@media (max-width: 600px) {
+.calendar-switch a.active {
+    background: #2563eb;
+    color: white !important;
+    border-color: #2563eb;
+}
+
+.calendar-header {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.calendar-header .month-name {
+    text-align: center;
+    font-size: 19px;
+    font-weight: 700;
+}
+
+.calendar-header .month-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color, #dddddd);
+    text-decoration: none !important;
+    color: var(--text-color) !important;
+    font-size: 24px;
+}
+
+.weekday-grid,
+.date-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 3px;
+}
+
+.weekday-grid {
+    margin-bottom: 8px;
+}
+
+.weekday {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-color);
+    opacity: 0.65;
+    padding: 8px 0;
+}
+
+.date-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-width: 0;
+    min-height: 51px;
+    padding: 3px 0;
+    border-radius: 12px;
+    text-decoration: none !important;
+    color: var(--text-color) !important;
+    box-sizing: border-box;
+}
+
+.date-cell .day-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.date-cell.selected .day-number {
+    background: #2563eb;
+    color: white;
+    font-weight: 700;
+}
+
+.date-cell.today:not(.selected) .day-number {
+    border: 1px solid #2563eb;
+    font-weight: 700;
+}
+
+.date-cell .deadline-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #3b82f6;
+    margin-top: 2px;
+}
+
+.date-cell.selected .deadline-dot {
+    background: #2563eb;
+}
+
+.date-cell:hover {
+    background: var(--secondary-background-color, #f2f2f2);
+}
+
+.calendar-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    font-size: 12px;
+    opacity: 0.8;
+    margin: 12px 0 20px 0;
+}
+
+.legend-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #3b82f6;
+    margin-right: 5px;
+}
+
+.legend-today {
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+    border: 1px solid #2563eb;
+    border-radius: 50%;
+    vertical-align: middle;
+    margin-right: 5px;
+}
+
+@media (max-width: 480px) {
     .block-container {
-        padding-top: 1rem;
-        padding-left: 0.5rem;
-        padding-right: 0.5rem;
+        padding-left: 0.45rem;
+        padding-right: 0.45rem;
     }
 
-    div[data-testid="stButton"] button {
-        min-height: 38px;
-        padding: 0;
-        font-size: 0.75rem;
-        border-radius: 10px;
+    .calendar-header .month-name {
+        font-size: 17px;
     }
 
-    .calendar-month-title {
-        font-size: 1rem;
+    .weekday-grid,
+    .date-grid {
+        gap: 1px;
     }
 
-    .calendar-weekday {
-        font-size: 0.7rem;
+    .date-cell {
+        min-height: 45px;
+        border-radius: 9px;
+    }
+
+    .date-cell .day-number {
+        width: 31px;
+        height: 31px;
+        font-size: 13px;
+    }
+
+    .weekday {
+        font-size: 11px;
+    }
+
+    .calendar-switch a {
+        font-size: 12px;
+        padding: 11px 4px;
     }
 }
 </style>
 """, unsafe_allow_html=True)
 
 
-# ---------- CALENDAR FUNCTION ----------
-def show_calendar(
-    calendar_id,
-    heading,
-    emoji,
-    deadline_lookup
-):
+# ---------- CALENDAR RENDERER ----------
+def show_calendar(prefix, title, emoji, deadline_lookup):
     today = date.today()
+    year, month, selected = get_calendar_state(prefix)
 
-    year_key = f"{calendar_id}_year"
-    month_key = f"{calendar_id}_month"
-    selected_key = f"{calendar_id}_selected_date"
+    st.subheader(f"{emoji} {title}")
 
-    if year_key not in st.session_state:
-        st.session_state[year_key] = today.year
+    # Month navigation
+    previous_month = month - 1
+    previous_year = year
 
-    if month_key not in st.session_state:
-        st.session_state[month_key] = today.month
+    if previous_month == 0:
+        previous_month = 12
+        previous_year -= 1
 
-    if selected_key not in st.session_state:
-        st.session_state[selected_key] = today.isoformat()
+    next_month = month + 1
+    next_year = year
 
-    st.subheader(f"{emoji} {heading}")
+    if next_month == 13:
+        next_month = 1
+        next_year += 1
 
-    # ---------- MONTH NAVIGATION ----------
-    previous, month_display, next_month = st.columns(
-        [1, 4, 1]
+    # Keep the selected day where possible when changing months
+    previous_day = min(
+        selected.day,
+        calendar.monthrange(previous_year, previous_month)[1]
+    )
+    next_day = min(
+        selected.day,
+        calendar.monthrange(next_year, next_month)[1]
     )
 
-    with previous:
-        if st.button(
-            "‹",
-            key=f"{calendar_id}_previous",
-            use_container_width=True
-        ):
-            if st.session_state[month_key] == 1:
-                st.session_state[month_key] = 12
-                st.session_state[year_key] -= 1
-            else:
-                st.session_state[month_key] -= 1
-
-            st.rerun()
-
-    with month_display:
-        month_name = calendar.month_name[
-            st.session_state[month_key]
-        ]
-
-        st.markdown(
-            f'<div class="calendar-month-title">'
-            f'{month_name} {st.session_state[year_key]}'
-            f'</div>',
-            unsafe_allow_html=True
-        )
-
-    with next_month:
-        if st.button(
-            "›",
-            key=f"{calendar_id}_next",
-            use_container_width=True
-        ):
-            if st.session_state[month_key] == 12:
-                st.session_state[month_key] = 1
-                st.session_state[year_key] += 1
-            else:
-                st.session_state[month_key] += 1
-
-            st.rerun()
-
-    # ---------- WEEKDAY HEADINGS ----------
-    weekdays = ["S", "M", "T", "W", "T", "F", "S"]
-
-    weekday_columns = st.columns(7)
-
-    for column, weekday in zip(
-        weekday_columns, weekdays
-    ):
-        column.markdown(
-            f'<div class="calendar-weekday">'
-            f'{weekday}</div>',
-            unsafe_allow_html=True
-        )
-
-    # ---------- CALENDAR DATES ----------
-    month_calendar = calendar.Calendar(
-        firstweekday=6
+    previous_selected = date(
+        previous_year, previous_month, previous_day
+    )
+    next_selected = date(
+        next_year, next_month, next_day
     )
 
-    weeks = month_calendar.monthdayscalendar(
-        st.session_state[year_key],
-        st.session_state[month_key]
+    previous_url = make_url({
+        "active_calendar": prefix,
+        f"{prefix}_year": previous_year,
+        f"{prefix}_month": previous_month,
+        f"{prefix}_date": previous_selected.isoformat(),
+    })
+
+    next_url = make_url({
+        "active_calendar": prefix,
+        f"{prefix}_year": next_year,
+        f"{prefix}_month": next_month,
+        f"{prefix}_date": next_selected.isoformat(),
+    })
+
+    month_name = calendar.month_name[month]
+
+    st.markdown(
+        f"""
+        <div class="calendar-header">
+            <a class="month-arrow"
+               href="{escape(previous_url, quote=True)}"
+               aria-label="Previous month">‹</a>
+            <div class="month-name">
+                {month_name} {year}
+            </div>
+            <a class="month-arrow"
+               href="{escape(next_url, quote=True)}"
+               aria-label="Next month">›</a>
+        </div>
+        """,
+        unsafe_allow_html=True
     )
 
-    for week_index, week in enumerate(weeks):
-        columns = st.columns(7)
+    # Weekdays and dates start on Sunday
+    weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-        for day_index, day_number in enumerate(week):
-            with columns[day_index]:
+    weekday_html = "".join(
+        f'<div class="weekday">{day}</div>'
+        for day in weekdays
+    )
 
-                if day_number == 0:
-                    st.write("")
-                    continue
+    st.markdown(
+        f'<div class="weekday-grid">{weekday_html}</div>',
+        unsafe_allow_html=True
+    )
 
-                chosen_date = date(
-                    st.session_state[year_key],
-                    st.session_state[month_key],
-                    day_number
+    month_calendar = calendar.Calendar(firstweekday=6)
+    weeks = month_calendar.monthdayscalendar(year, month)
+
+    date_cells = []
+
+    for week in weeks:
+        for day_number in week:
+            if day_number == 0:
+                date_cells.append(
+                    '<div class="date-cell empty"></div>'
                 )
+                continue
 
-                date_key = chosen_date.isoformat()
+            chosen_date = date(year, month, day_number)
+            date_key = chosen_date.isoformat()
 
-                has_deadline = (
-                    date_key in deadline_lookup
-                )
+            has_deadline = date_key in deadline_lookup
+            is_selected = chosen_date == selected
+            is_today = chosen_date == today
 
-                is_selected = (
-                    st.session_state[selected_key]
-                    == date_key
-                )
+            classes = ["date-cell"]
 
-                is_today = chosen_date == today
+            if is_selected:
+                classes.append("selected")
 
-                # Keep the date number readable.
-                # Deadline dots and today's marker are separate.
-                if is_today:
-                    label = f"• {day_number}"
-                else:
-                    label = str(day_number)
+            if is_today:
+                classes.append("today")
 
-                if has_deadline:
-                    label = f"● {day_number}"
+            url = make_url({
+                "active_calendar": prefix,
+                f"{prefix}_year": year,
+                f"{prefix}_month": month,
+                f"{prefix}_date": date_key,
+            })
 
-                if is_today and has_deadline:
-                    label = f"● {day_number} •"
+            dot_html = (
+                '<span class="deadline-dot"></span>'
+                if has_deadline
+                else ""
+            )
 
-                if st.button(
-                    label,
-                    key=f"{calendar_id}_day_{date_key}",
-                    use_container_width=True,
-                    type=(
-                        "primary"
-                        if is_selected
-                        else "secondary"
-                    ),
-                    help=(
-                        "Deadline recorded"
-                        if has_deadline
-                        else f"Select {chosen_date.strftime('%d %B %Y')}"
-                    )
-                ):
-                    st.session_state[selected_key] = date_key
-                    st.rerun()
+            date_cells.append(
+                f'<a class="{" ".join(classes)}" '
+                f'href="{escape(url, quote=True)}" '
+                f'aria-label="{chosen_date.strftime("%A, %d %B %Y")}" '
+                f'title="{chosen_date.strftime("%d %B %Y")}'
+                f'{" — Deadline recorded" if has_deadline else ""}">'
+                f'<span class="day-number">{day_number}</span>'
+                f'{dot_html}'
+                f'</a>'
+            )
 
-    # ---------- SELECTED-DAY RESULTS ----------
-    selected_date = st.session_state[selected_key]
-    parsed_selected_date = date.fromisoformat(
-        selected_date
+    st.markdown(
+        '<div class="date-grid">'
+        + "".join(date_cells)
+        + '</div>',
+        unsafe_allow_html=True
     )
 
+    st.markdown("""
+        <div class="calendar-legend">
+            <span><span class="legend-dot"></span>Deadline recorded</span>
+            <span><span class="legend-today"></span>Today</span>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # ---------- SELECTED DATE RESULTS ----------
     st.divider()
 
     st.markdown(
-        f"**{parsed_selected_date.strftime('%A, %d %B %Y')}**"
+        f"### {selected.strftime('%A, %d %B %Y')}"
     )
 
-    matches = deadline_lookup.get(
-        selected_date, []
-    )
+    matches = deadline_lookup.get(selected.isoformat(), [])
 
     if matches:
         st.success(
-            f"{len(matches)} closing deadline(s) recorded"
+            f"{len(matches)} deadline(s) recorded for this date."
         )
 
-        for item in matches:
+        for index, item in enumerate(matches):
             with st.container(border=True):
                 st.markdown(
                     f"**{emoji} {item.get('name', 'Opportunity')}**"
@@ -349,43 +496,74 @@ def show_calendar(
                     st.link_button(
                         "Visit official website ↗",
                         item["website"],
-                        key=(
-                            f"{calendar_id}_link_"
-                            f"{item.get('id', item['name'])}"
-                        ),
+                        key=f"{prefix}_website_{index}_{selected.isoformat()}",
                         use_container_width=True
                     )
-
     else:
         st.info(
-            "No closing deadlines are recorded for this date. "
-            "Some opportunities may have unlisted or "
+            "No recorded closing deadlines for this date. "
+            "Check official websites for additional or "
             "programme-specific deadlines."
         )
 
     st.caption(
-        "● Deadline recorded · • Today. "
-        "Confirm dates on official websites."
+        "Deadline information may change. Always confirm "
+        "dates on the relevant official website."
     )
 
 
-# ---------- UNIVERSITY AND BURSARY TABS ----------
-university_tab, bursary_tab = st.tabs([
-    "🎓 Universities",
-    "💰 Bursaries"
-])
+# ---------- CALENDAR SWITCHER ----------
+active_calendar = st.query_params.get(
+    "active_calendar", "university"
+)
 
-with university_tab:
+if active_calendar not in ["university", "bursary"]:
+    active_calendar = "university"
+
+university_tab_url = make_url({
+    "active_calendar": "university"
+})
+
+bursary_tab_url = make_url({
+    "active_calendar": "bursary"
+})
+
+university_class = (
+    "active" if active_calendar == "university" else ""
+)
+
+bursary_class = (
+    "active" if active_calendar == "bursary" else ""
+)
+
+st.markdown(
+    f"""
+    <div class="calendar-switch">
+        <a class="{university_class}"
+           href="{escape(university_tab_url, quote=True)}">
+           🎓 Universities
+        </a>
+        <a class="{bursary_class}"
+           href="{escape(bursary_tab_url, quote=True)}">
+           💰 Bursaries
+        </a>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# ---------- DISPLAY SELECTED CALENDAR ----------
+if active_calendar == "university":
     show_calendar(
-        "university_calendar",
-        "University Deadlines",
+        "u",
+        "University Application Deadlines",
         "🎓",
         university_deadlines
     )
-
-with bursary_tab:
+else:
     show_calendar(
-        "bursary_calendar",
+        "b",
         "Bursary & Scholarship Deadlines",
         "💰",
         bursary_deadlines
