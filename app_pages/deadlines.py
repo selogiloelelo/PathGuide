@@ -213,38 +213,43 @@ def show_calendar(calendar_id, heading, emoji, deadline_lookup):
 
 # ---------- DISPLAY BOTH CALENDARS SIDE BY SIDE ----------
 # ---------- COMPACT CALENDAR LAYOUT ----------
+
+# ---------- MOBILE-FRIENDLY CALENDAR LAYOUT ----------
 st.markdown("""
 <style>
-/* Reduce space around the page content */
 .block-container {
-    padding-top: 1.5rem;
-    padding-left: 1rem;
-    padding-right: 1rem;
+    padding-top: 1.25rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
 }
 
-/* Make calendar buttons more compact */
+/* Compact, comfortable date buttons */
 div[data-testid="stButton"] button {
-    min-height: 32px;
-    padding: 0.15rem 0.1rem;
-    font-size: 0.8rem;
-    border-radius: 6px;
+    min-height: 38px;
+    padding: 0.15rem 0;
+    font-size: 0.85rem;
+    border-radius: 8px;
 }
 
-/* Reduce spacing between calendar elements */
+/* Reduce gaps between calendar columns */
 div[data-testid="stHorizontalBlock"] {
-    gap: 0.35rem;
+    gap: 0.3rem;
 }
 
-/* Smaller headings */
+/* Keep calendar headings neat */
 h3 {
-    font-size: 1.15rem;
+    font-size: 1.1rem;
 }
 </style>
 """, unsafe_allow_html=True)
 
-university_column, bursary_column = st.columns(2, gap="small")
+# Tabs keep the calendars from being squeezed together
+university_tab, bursary_tab = st.tabs([
+    "🎓 Universities",
+    "💰 Bursaries"
+])
 
-with university_column:
+with university_tab:
     show_calendar(
         "university_calendar",
         "University Deadlines",
@@ -252,7 +257,7 @@ with university_column:
         university_deadlines
     )
 
-with bursary_column:
+with bursary_tab:
     show_calendar(
         "bursary_calendar",
         "Bursary Deadlines",
