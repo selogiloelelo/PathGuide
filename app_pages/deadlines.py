@@ -69,6 +69,7 @@ bursary_deadlines = build_deadline_lookup(bursaries)
 # ---------- URL STATE ----------
 def make_url(updates):
     params = dict(st.query_params)
+    params["page"] = "Application Deadlines"
     params.update(updates)
     return "?" + urlencode(params)
 
