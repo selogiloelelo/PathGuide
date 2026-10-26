@@ -35,8 +35,8 @@ def parse_date(value):
 
 
 # ---------- PREPARE DEADLINES ----------
-universities = get_universities()
-bursaries = get_bursaries()
+universities = [dict(row) for row in get_universities()]
+bursaries = [dict(row) for row in get_bursaries()]
 
 
 def build_deadline_lookup(items):
