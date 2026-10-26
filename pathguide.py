@@ -54,6 +54,13 @@ if "selected_page" not in st.session_state:
     st.session_state["selected_page"] = "Home"
 
 
+# Remember the selected page when the app reloads
+if "selected_page" not in st.session_state:
+    st.session_state.selected_page = "Home"
+
+if st.query_params.get("page") == "Application Deadlines":
+    st.session_state.selected_page = "Application Deadlines"
+
 page = st.sidebar.radio(
     "Navigate",
     pages,
