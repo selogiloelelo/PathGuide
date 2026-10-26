@@ -4,12 +4,18 @@ import calendar
 from datetime import date, datetime
 from database import get_universities, get_bursaries
 
-st.title("📅 Application Deadline Calendars")
-st.write(
-    "Explore university application and bursary deadlines. "
-    "Select any date to see opportunities closing that day."
+st.set_page_config(
+    page_title="Application Deadlines | PathGuide SA",
+    page_icon="📅",
+    layout="wide"
 )
 
+# ---------- PAGE HEADER ----------
+st.title("📅 Application Deadlines")
+st.caption(
+    "Plan ahead. Select a date to discover university "
+    "application and bursary deadlines."
+)
 
 # ---------- DATE HELPER ----------
 def parse_date(value):
@@ -34,16 +40,24 @@ def parse_date(value):
     return None
 
 
-# ---------- PREPARE DEADLINES ----------
-universities = [dict(row) for row in get_universities()]
-bursaries = [dict(row) for row in get_bursaries()]
+# ---------- LOAD DATABASE DATA ----------
+universities = [
+    dict(row) for row in get_universities()
+]
+
+bursaries = [
+    dict(row) for row in get_bursaries()
+]
 
 
+# ---------- GROUP OPPORTUNITIES BY CLOSING DATE ----------
 def build_deadline_lookup(items):
     lookup = {}
 
     for item in items:
-        closing_date = parse_date(item.get("closing_date"))
+        closing_date = parse_date(
+            item.get("closing_date")
+        )
 
         if closing_date:
             key = closing_date.isoformat()
@@ -56,10 +70,90 @@ university_deadlines = build_deadline_lookup(universities)
 bursary_deadlines = build_deadline_lookup(bursaries)
 
 
-# ---------- CALENDAR FUNCTION ----------
-def show_calendar(calendar_id, heading, emoji, deadline_lookup):
-    st.subheader(f"{emoji} {heading}")
+# ---------- CALENDAR STYLING ----------
+st.markdown("""
+<style>
+/* Main page spacing */
+.block-container {
+    padding-top: 1.5rem;
+    padding-bottom: 2rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
 
+/* Calendar headings */
+.calendar-month-title {
+    text-align: center;
+    font-size: 1.15rem;
+    font-weight: 700;
+    padding: 0.45rem 0;
+}
+
+/* Weekday headings */
+.calendar-weekday {
+    text-align: center;
+    color: var(--text-color);
+    opacity: 0.7;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.35rem 0;
+}
+
+/* Date buttons */
+div[data-testid="stButton"] button {
+    min-height: 40px;
+    padding: 0.1rem 0.05rem;
+    border-radius: 12px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+/* Tighter calendar grid */
+div[data-testid="stHorizontalBlock"] {
+    gap: 0.25rem;
+}
+
+/* Tabs */
+button[data-baseweb="tab"] {
+    font-weight: 600;
+}
+
+/* Mobile adjustments */
+@media (max-width: 600px) {
+    .block-container {
+        padding-top: 1rem;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+    }
+
+    div[data-testid="stButton"] button {
+        min-height: 38px;
+        padding: 0;
+        font-size: 0.75rem;
+        border-radius: 10px;
+    }
+
+    .calendar-month-title {
+        font-size: 1rem;
+    }
+
+    .calendar-weekday {
+        font-size: 0.7rem;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# ---------- CALENDAR FUNCTION ----------
+def show_calendar(
+    calendar_id,
+    heading,
+    emoji,
+    deadline_lookup
+):
     today = date.today()
 
     year_key = f"{calendar_id}_year"
@@ -75,12 +169,16 @@ def show_calendar(calendar_id, heading, emoji, deadline_lookup):
     if selected_key not in st.session_state:
         st.session_state[selected_key] = today.isoformat()
 
-    # Month navigation
-    previous, month_display, next_month = st.columns([1, 3, 1])
+    st.subheader(f"{emoji} {heading}")
+
+    # ---------- MONTH NAVIGATION ----------
+    previous, month_display, next_month = st.columns(
+        [1, 4, 1]
+    )
 
     with previous:
         if st.button(
-            "◀",
+            "‹",
             key=f"{calendar_id}_previous",
             use_container_width=True
         ):
@@ -89,23 +187,24 @@ def show_calendar(calendar_id, heading, emoji, deadline_lookup):
                 st.session_state[year_key] -= 1
             else:
                 st.session_state[month_key] -= 1
+
             st.rerun()
 
     with month_display:
         month_name = calendar.month_name[
             st.session_state[month_key]
         ]
+
         st.markdown(
-            f"<div style='text-align:center;font-weight:bold;"
-            f"padding-top:8px'>"
-            f"{month_name} {st.session_state[year_key]}"
-            f"</div>",
+            f'<div class="calendar-month-title">'
+            f'{month_name} {st.session_state[year_key]}'
+            f'</div>',
             unsafe_allow_html=True
         )
 
     with next_month:
         if st.button(
-            "▶",
+            "›",
             key=f"{calendar_id}_next",
             use_container_width=True
         ):
@@ -114,32 +213,41 @@ def show_calendar(calendar_id, heading, emoji, deadline_lookup):
                 st.session_state[year_key] += 1
             else:
                 st.session_state[month_key] += 1
+
             st.rerun()
 
-    # Weekday headings
-    weekdays = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
+    # ---------- WEEKDAY HEADINGS ----------
+    weekdays = ["S", "M", "T", "W", "T", "F", "S"]
+
     weekday_columns = st.columns(7)
 
-    for column, weekday in zip(weekday_columns, weekdays):
+    for column, weekday in zip(
+        weekday_columns, weekdays
+    ):
         column.markdown(
-            f"<div style='text-align:center;font-size:12px;"
-            f"color:gray'>{weekday}</div>",
+            f'<div class="calendar-weekday">'
+            f'{weekday}</div>',
             unsafe_allow_html=True
         )
 
-    weeks = calendar.monthcalendar(
+    # ---------- CALENDAR DATES ----------
+    month_calendar = calendar.Calendar(
+        firstweekday=6
+    )
+
+    weeks = month_calendar.monthdayscalendar(
         st.session_state[year_key],
         st.session_state[month_key]
     )
 
-    # Draw calendar dates
-    for week in weeks:
+    for week_index, week in enumerate(weeks):
         columns = st.columns(7)
 
-        for column, day_number in zip(columns, week):
-            with column:
+        for day_index, day_number in enumerate(week):
+            with columns[day_index]:
+
                 if day_number == 0:
-                    st.write(" ")
+                    st.write("")
                     continue
 
                 chosen_date = date(
@@ -149,101 +257,119 @@ def show_calendar(calendar_id, heading, emoji, deadline_lookup):
                 )
 
                 date_key = chosen_date.isoformat()
-                has_deadline = date_key in deadline_lookup
-                is_selected = (
-                    st.session_state[selected_key] == date_key
+
+                has_deadline = (
+                    date_key in deadline_lookup
                 )
 
-                label = str(day_number)
+                is_selected = (
+                    st.session_state[selected_key]
+                    == date_key
+                )
+
+                is_today = chosen_date == today
+
+                # Keep the date number readable.
+                # Deadline dots and today's marker are separate.
+                if is_today:
+                    label = f"• {day_number}"
+                else:
+                    label = str(day_number)
 
                 if has_deadline:
-                    label = f"🔵 {day_number}"
+                    label = f"● {day_number}"
 
-                if chosen_date == today:
-                    label = f"• {day_number}"
+                if is_today and has_deadline:
+                    label = f"● {day_number} •"
 
                 if st.button(
                     label,
                     key=f"{calendar_id}_day_{date_key}",
                     use_container_width=True,
-                    type="primary" if is_selected else "secondary"
+                    type=(
+                        "primary"
+                        if is_selected
+                        else "secondary"
+                    ),
+                    help=(
+                        "Deadline recorded"
+                        if has_deadline
+                        else f"Select {chosen_date.strftime('%d %B %Y')}"
+                    )
                 ):
                     st.session_state[selected_key] = date_key
                     st.rerun()
 
-    # Results below this calendar
+    # ---------- SELECTED-DAY RESULTS ----------
     selected_date = st.session_state[selected_key]
-    parsed_selected_date = date.fromisoformat(selected_date)
-
-    st.markdown("---")
-    st.markdown(
-        f"**Closing on {parsed_selected_date.strftime('%d %b %Y')}**"
+    parsed_selected_date = date.fromisoformat(
+        selected_date
     )
 
-    matches = deadline_lookup.get(selected_date, [])
+    st.divider()
+
+    st.markdown(
+        f"**{parsed_selected_date.strftime('%A, %d %B %Y')}**"
+    )
+
+    matches = deadline_lookup.get(
+        selected_date, []
+    )
 
     if matches:
-        st.success(f"{len(matches)} deadline(s) found.")
+        st.success(
+            f"{len(matches)} closing deadline(s) recorded"
+        )
 
         for item in matches:
             with st.container(border=True):
-                st.markdown(f"**{emoji} {item['name']}**")
+                st.markdown(
+                    f"**{emoji} {item.get('name', 'Opportunity')}**"
+                )
 
                 if item.get("provider"):
-                    st.caption(f"Provider: {item['provider']}")
+                    st.caption(
+                        f"Provider: {item['provider']}"
+                    )
 
-                st.caption(
-                    f"Closing date: {item.get('closing_date', 'Not available')}"
-                )
+                if item.get("closing_date"):
+                    st.write(
+                        f"Closing date: {item['closing_date']}"
+                    )
+
+                if item.get("description"):
+                    st.write(item["description"])
+
+                if item.get("eligibility"):
+                    st.caption(
+                        f"Eligibility: {item['eligibility']}"
+                    )
 
                 if item.get("website"):
                     st.link_button(
-                        "Official website",
+                        "Visit official website ↗",
                         item["website"],
-                        key=f"{calendar_id}_link_{item['name']}"
+                        key=(
+                            f"{calendar_id}_link_"
+                            f"{item.get('id', item['name'])}"
+                        ),
+                        use_container_width=True
                     )
+
     else:
-        st.info("No recorded deadlines for this date.")
+        st.info(
+            "No closing deadlines are recorded for this date. "
+            "Some opportunities may have unlisted or "
+            "programme-specific deadlines."
+        )
 
     st.caption(
-        "🔵 Dates with recorded deadlines. "
+        "● Deadline recorded · • Today. "
         "Confirm dates on official websites."
     )
 
 
-# ---------- DISPLAY BOTH CALENDARS SIDE BY SIDE ----------
-# ---------- COMPACT CALENDAR LAYOUT ----------
-
-# ---------- MOBILE-FRIENDLY CALENDAR LAYOUT ----------
-st.markdown("""
-<style>
-.block-container {
-    padding-top: 1.25rem;
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
-}
-
-/* Compact, comfortable date buttons */
-div[data-testid="stButton"] button {
-    min-height: 38px;
-    padding: 0.15rem 0;
-    font-size: 0.85rem;
-    border-radius: 8px;
-}
-
-/* Reduce gaps between calendar columns */
-div[data-testid="stHorizontalBlock"] {
-    gap: 0.3rem;
-}
-
-/* Keep calendar headings neat */
-h3 {
-    font-size: 1.1rem;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# Tabs keep the calendars from being squeezed together
+# ---------- UNIVERSITY AND BURSARY TABS ----------
 university_tab, bursary_tab = st.tabs([
     "🎓 Universities",
     "💰 Bursaries"
@@ -260,7 +386,7 @@ with university_tab:
 with bursary_tab:
     show_calendar(
         "bursary_calendar",
-        "Bursary Deadlines",
+        "Bursary & Scholarship Deadlines",
         "💰",
         bursary_deadlines
     )
